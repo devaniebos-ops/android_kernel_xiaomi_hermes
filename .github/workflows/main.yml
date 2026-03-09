@@ -5,22 +5,22 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04 # Gunakan 22.04 untuk stabilitas library lama
+    runs-on: ubuntu-22.04 # Versi paling stabil untuk library i386
     
     steps:
     - name: Checkout Source
-      uses: actions/checkout@v4 # Versi terbaru
+      uses: actions/checkout@v4
       with:
-        ref: lineage-16.0 # Memastikan branch yang benar
+        ref: lineage-16.0
 
     - name: Install Dependencies
       run: |
+        sudo dpkg --add-architecture i386
         sudo apt-get update
-        sudo apt-get install -y bc build-essential zip curl libssl-dev libc6-i386 lib32ncurses5 lib32z1 lib32stdc++6 binutils-aarch64-linux-gnu libncurses5
+        sudo apt-get install -y bc build-essential zip curl libssl-dev libc6-i386 lib32stdc++6 lib32z1 binutils-aarch64-linux-gnu libncurses5 libncurses5:i386 libstdc++6:i386
 
     - name: Download Toolchain
       run: |
-        # Download GCC 4.9 dari mirror yang stabil
         git clone https://github.com/lineageos/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 toolchain --depth=1
 
     - name: Build Kernel
@@ -28,14 +28,14 @@ jobs:
         export ARCH=arm64
         export CROSS_COMPILE=$(pwd)/toolchain/bin/aarch64-linux-android-
         
-        # Bersihkan sisa build sebelumnya jika ada
+        # Bersihkan sisa build
         make clean
         make mrproper
         
-        # Gunakan config bawaan Hermes
+        # Konfigurasi defconfig Hermes
         make hermes_defconfig
         
-        # --- MODIFIKASI CONFIG UNTUK NAMESPACE (VNC FIX) ---
+        # --- AUTO-INJECT NAMESPACE (FIX UNTUK VNC/CHROOT) ---
         sed -i 's/# CONFIG_NAMESPACES is not set/CONFIG_NAMESPACES=y/' .config
         {
           echo "CONFIG_UTS_NS=y"
@@ -45,20 +45,20 @@ jobs:
           echo "CONFIG_NET_NS=y"
         } >> .config
         
-        # Mulai kompilasi menggunakan semua core CPU yang tersedia
+        # Mulai kompilasi
         make -j$(nproc)
 
-    - name: Check for Output
+    - name: Check Output
       run: |
         if [ -f arch/arm64/boot/Image.gz-dtb ]; then
-          echo "✅ Kernel Berhasil Dibuat!"
+          echo "✅ KERNEL BERHASIL DI-BUILD!"
         else
-          echo "❌ Kernel Gagal Dibuat. Cek log di atas."
+          echo "❌ KERNEL TIDAK DITEMUKAN!"
           exit 1
         fi
 
-    - name: Upload Kernel Artifact
-      uses: actions/upload-artifact@v4 # VERSI TERBARU (Anti-Error)
+    - name: Upload Kernel
+      uses: actions/upload-artifact@v4
       with:
         name: Kernel-Hermes-Update
         path: arch/arm64/boot/Image.gz-dtb
