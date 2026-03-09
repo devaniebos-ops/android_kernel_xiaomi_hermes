@@ -32,23 +32,23 @@ jobs:
         make mrproper
         make hermes_defconfig
         
-        # --- FIX GLOBAL UID/GID ---
+        # --- 1. GLOBAL UID/GID FIX (Fungsi Perbandingan) ---
         find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->euid != \([^ ]*\)->suid/!uid_eq(\1->euid, \2->suid)/g' {} +
         find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->uid != \([^ ]*\)->uid/!uid_eq(\1->uid, \2->uid)/g' {} +
         find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->gid != \([^ ]*\)->gid/!gid_eq(\1->gid, \2->gid)/g' {} +
+        find fs/sdcardfs/ -type f -name "*.c" -exec sed -i 's/== 0/== GLOBAL_ROOT_UID/g' {} +
+        find fs/sdcardfs/ -type f -name "*.c" -exec sed -i 's/!= 0/!= GLOBAL_ROOT_UID/g' {} +
 
-        # --- FIX SDCARDFS (Total War Version) ---
-        sed -i 's/current_fsuid() == 0/uid_eq(current_fsuid(), GLOBAL_ROOT_UID)/g' fs/sdcardfs/packagelist.c
-        sed -i 's/attrs.ia_uid = uid/attrs.ia_uid = KUIDT_INIT(uid)/g' fs/sdcardfs/sdcardfs.h
-        sed -i 's/attrs.ia_gid = gid/attrs.ia_gid = KGIDT_INIT(gid)/g' fs/sdcardfs/sdcardfs.h
-        sed -i 's/(x)->i_uid = SDCARDFS_I(x)->data->d_uid/(x)->i_uid = KUIDT_INIT(SDCARDFS_I(x)->data->d_uid)/g' fs/sdcardfs/sdcardfs.h
-        sed -i 's/(x)->i_gid = AID_SDCARD_RW/(x)->i_gid = KGIDT_INIT(AID_SDCARD_RW)/g' fs/sdcardfs/sdcardfs.h
-        sed -i 's/dest->i_uid = SDCARDFS_I(dest)->data->d_uid/dest->i_uid = KUIDT_INIT(SDCARDFS_I(dest)->data->d_uid)/g' fs/sdcardfs/sdcardfs.h
-        sed -i 's/dest->i_gid = AID_SDCARD_RW/dest->i_gid = KGIDT_INIT(AID_SDCARD_RW)/g' fs/sdcardfs/sdcardfs.h
-        sed -i 's/cred->fsuid = uid/cred->fsuid = KUIDT_INIT(uid)/g' fs/sdcardfs/inode.c
-        sed -i 's/cred->fsgid = sbi->options.fs_low_gid/cred->fsgid = KGIDT_INIT(sbi->options.fs_low_gid)/g' fs/sdcardfs/inode.c
+        # --- 2. SDCARDFS STRUCT WRAPPER (Penetapan Nilai) ---
+        # Bungkus semua penetapan UID/GID dengan KUIDT_INIT/KGIDT_INIT secara massal
+        find fs/sdcardfs/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/\.ia_uid = \([^;]*\)/.ia_uid = KUIDT_INIT(\1)/g' {} +
+        find fs/sdcardfs/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/\.ia_gid = \([^;]*\)/.ia_gid = KGIDT_INIT(\1)/g' {} +
+        find fs/sdcardfs/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/->i_uid = \([^;]*\)/->i_uid = KUIDT_INIT(\1)/g' {} +
+        find fs/sdcardfs/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/->i_gid = \([^;]*\)/->i_gid = KGIDT_INIT(\1)/g' {} +
+        find fs/sdcardfs/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/->fsuid = \([^;]*\)/->fsuid = KUIDT_INIT(\1)/g' {} +
+        find fs/sdcardfs/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/->fsgid = \([^;]*\)/->fsgid = KGIDT_INIT(\1)/g' {} +
 
-        # --- SUNTIK NAMESPACE ---
+        # --- 3. SUNTIK NAMESPACE ---
         sed -i 's/# CONFIG_NAMESPACES is not set/CONFIG_NAMESPACES=y/' .config
         {
           echo "CONFIG_UTS_NS=y"
