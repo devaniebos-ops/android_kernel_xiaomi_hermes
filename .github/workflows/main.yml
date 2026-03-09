@@ -1,4 +1,4 @@
-name: Build Kernel Hermes - Manual Debug
+name: Build Kernel Hermes - Fix CMDQ
 
 on:
   workflow_dispatch:
@@ -23,19 +23,35 @@ jobs:
       run: |
         git clone https://github.com/lineageos/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 toolchain --depth=1
 
-    - name: Manual Compile & Inspect
+    - name: Build Kernel
       run: |
         export ARCH=arm64
         export CROSS_COMPILE=$(pwd)/toolchain/bin/aarch64-linux-android-
         
+        # --- FIX: Tambahkan jalur include yang hilang untuk CMDQ ---
+        # Kita beri tahu Makefile agar mencari header di folder mt6795 juga
+        find drivers/misc/mediatek/cmdq/v2/ -name "Makefile" -exec sed -i 's|ccflags-y += -I|ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v2/mt6795/ -I|g' {} +
+        
         make hermes_defconfig
         
-        echo "--- STEP 1: Cek folder drivers ---"
-        ls -F drivers/ | grep "/"
+        # Build murni sekarang harusnya sudah bisa menemukan cmdq_engine.h
+        make -j$(nproc) KCFLAGS="-w"
         
-        echo "--- STEP 2: Mencoba kompilasi folder drivers secara paksa ---"
-        # Kita paksa hanya build folder drivers untuk melihat error spesifiknya
-        make drivers/ V=1 KCFLAGS="-w" 2>&1 | tee manual_debug.log || true
-        
-        echo "--- STEP 3: Analisa 100 baris error drivers ---"
-        tail -n 100 manual_debug.log
+    - name: Check Output
+      if: always()
+      run: |
+        if [ -f arch/arm64/boot/Image.gz-dtb ]; then
+          echo "✅ KERNEL BERHASIL!"
+        else
+          echo "❌ KERNEL GAGAL! Cek log error terbaru di bawah:"
+          # Mencari baris error tanpa membanjiri layar
+          grep -i "error:" build.log || tail -n 50
+          exit 1
+        fi
+
+    - name: Upload Kernel
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kernel-Hermes-Fixed
+        path: arch/arm64/boot/Image.gz-dtb
