@@ -32,11 +32,13 @@ jobs:
         make mrproper
         make hermes_defconfig
         
-        # FIX CGROUP UID ERROR (Suntikan Sakti)
-        sed -i 's/cred->euid != tcred->suid/!uid_eq(cred->euid, tcred->suid)/g' kernel/cgroup.c
-        sed -i 's/cred->uid != tcred->uid/!uid_eq(cred->uid, tcred->uid)/g' kernel/cgroup.c
-        
-        # SUNTIK NAMESPACE
+        # --- GLOBAL UID/GID FIX (Mencegah Error di fs/ dan kernel/) ---
+        # Mengganti perbandingan UID/GID struktural menjadi fungsi uid_eq/gid_eq
+        find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->euid != \([^ ]*\)->suid/!uid_eq(\1->euid, \2->suid)/g' {} +
+        find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->uid != \([^ ]*\)->uid/!uid_eq(\1->uid, \2->uid)/g' {} +
+        find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->gid != \([^ ]*\)->gid/!gid_eq(\1->gid, \2->gid)/g' {} +
+
+        # --- SUNTIK NAMESPACE ---
         sed -i 's/# CONFIG_NAMESPACES is not set/CONFIG_NAMESPACES=y/' .config
         {
           echo "CONFIG_UTS_NS=y"
@@ -46,6 +48,7 @@ jobs:
           echo "CONFIG_NET_NS=y"
         } >> .config
         
+        # Jalankan build
         make -j$(nproc)
 
     - name: Check Output
@@ -53,7 +56,7 @@ jobs:
         if [ -f arch/arm64/boot/Image.gz-dtb ]; then
           echo "✅ KERNEL BERHASIL!"
         else
-          echo "❌ KERNEL GAGAL!"
+          echo "❌ KERNEL GAGAL! Periksa log di bagian Build Kernel."
           exit 1
         fi
 
