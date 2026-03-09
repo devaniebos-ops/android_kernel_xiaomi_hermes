@@ -1,0 +1,43 @@
+name: Build Kernel Hermes
+
+on:
+  workflow_dispatch: # Agar bisa dijalankan manual lewat tombol
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04 # Versi Ubuntu yang paling cocok buat kernel 3.10
+    
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v3
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc build-essential zip curl libssl-dev libc6-i386 lib32ncurses5 lib32z1 lib32stdc++6 binutils-aarch64-linux-gnu
+
+    - name: Download Toolchain
+      run: |
+        git clone https://github.com/lineageos/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 toolchain --depth=1
+
+    - name: Build Kernel
+      run: |
+        export ARCH=arm64
+        export CROSS_COMPILE=$(pwd)/toolchain/bin/aarch64-linux-android-
+        make hermes_defconfig
+        
+        # SUNTIK NAMESPACE DISINI BIAR VNC LANCAR
+        sed -i 's/# CONFIG_NAMESPACES is not set/CONFIG_NAMESPACES=y/' .config
+        echo "CONFIG_UTS_NS=y" >> .config
+        echo "CONFIG_IPC_NS=y" >> .config
+        echo "CONFIG_USER_NS=y" >> .config
+        echo "CONFIG_PID_NS=y" >> .config
+        echo "CONFIG_NET_NS=y" >> .config
+        
+        make -j$(nproc)
+
+    - name: Upload Result
+      uses: actions/upload-artifact@v3
+      with:
+        name: Kernel-Hermes-Update
+        path: arch/arm64/boot/Image.gz-dtb
