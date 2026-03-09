@@ -1,4 +1,4 @@
-name: Build Kernel Hermes
+name: Build Kernel Hermes - Manual Debug
 
 on:
   workflow_dispatch:
@@ -23,35 +23,19 @@ jobs:
       run: |
         git clone https://github.com/lineageos/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 toolchain --depth=1
 
-    - name: Build Kernel
+    - name: Manual Compile & Inspect
       run: |
         export ARCH=arm64
         export CROSS_COMPILE=$(pwd)/toolchain/bin/aarch64-linux-android-
         
-        make clean
-        make mrproper
         make hermes_defconfig
         
-        # 1. Jalankan paralel dulu biar cepat sampai titik error
-        make -j$(nproc) KCFLAGS="-w" || true
+        echo "--- STEP 1: Cek folder drivers ---"
+        ls -F drivers/ | grep "/"
         
-        # 2. Jalankan SINGLE CORE (-j1) untuk menangkap error asli di akhir log
-        echo "----------------- CAPTURING ACTUAL ERROR -----------------"
-        make -j1 KCFLAGS="-w"
+        echo "--- STEP 2: Mencoba kompilasi folder drivers secara paksa ---"
+        # Kita paksa hanya build folder drivers untuk melihat error spesifiknya
+        make drivers/ V=1 KCFLAGS="-w" 2>&1 | tee manual_debug.log || true
         
-    - name: Check Output
-      if: always()
-      run: |
-        if [ -f arch/arm64/boot/Image.gz-dtb ]; then
-          echo "✅ KERNEL BERHASIL!"
-        else
-          echo "❌ KERNEL GAGAL!"
-          exit 1
-        fi
-
-    - name: Upload Kernel
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: Kernel-Hermes-Original
-        path: arch/arm64/boot/Image.gz-dtb
+        echo "--- STEP 3: Analisa 100 baris error drivers ---"
+        tail -n 100 manual_debug.log
