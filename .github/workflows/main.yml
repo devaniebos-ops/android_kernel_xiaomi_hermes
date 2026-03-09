@@ -1,4 +1,4 @@
-name: Build Kernel Hermes - Final Phase USER_NS
+name: Build Kernel Hermes - Debug UID Manual
 
 on:
   workflow_dispatch:
@@ -23,47 +23,27 @@ jobs:
       run: |
         git clone https://github.com/lineageos/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 toolchain --depth=1
 
-    - name: Build Kernel
+    - name: Manual Debugging
       run: |
         export ARCH=arm64
         export CROSS_COMPILE=$(pwd)/toolchain/bin/aarch64-linux-android-
         
-        # 1. FIX CMDQ (Wajib)
-        find drivers/misc/mediatek/cmdq/v2/ -name "Makefile" -exec sed -i 's|ccflags-y += -I|ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v2/mt6795/ -I|g' {} +
-        
-        # 2. PATCH OTOMATIS: Memperbaiki perbandingan UID/GID yang rusak akibat USER_NS
-        # Kita incar pola yang paling sering error di cgroup dan drivers
-        find . -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->euid != \([^ ]*\)->uid/!uid_eq(\1->euid, \2->uid)/g' {} +
-        find . -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->uid != \([^ ]*\)->uid/!uid_eq(\1->uid, \2->uid)/g' {} +
-
+        # 1. Setup Config dengan USER_NS Aktif
         make hermes_defconfig
-
-        # --- AKTIFKAN SEMUA NAMESPACE ---
         echo "CONFIG_NAMESPACES=y" >> .config
-        echo "CONFIG_UTS_NS=y" >> .config
-        echo "CONFIG_IPC_NS=y" >> .config
-        echo "CONFIG_PID_NS=y" >> .config
-        echo "CONFIG_NET_NS=y" >> .config
         echo "CONFIG_USER_NS=y" >> .config
-        
         make olddefconfig
-        
-        # Kita pakai -j2 tapi jika gagal kita akan coba tangkap errornya
-        make -j$(nproc) KCFLAGS="-w" || (make -j1 KCFLAGS="-w" 2>&1 | grep "error:")
-        
-    - name: Check Output
-      if: always()
-      run: |
-        if [ -f arch/arm64/boot/Image.gz-dtb ]; then
-          echo "✅ MISI SELESAI: KERNEL FULL NAMESPACE SUKSES!"
-        else
-          echo "❌ GAGAL DI USER_NS! Masih ada kode yang butuh uid_eq manual."
-          exit 1
-        fi
 
-    - name: Upload Kernel
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: Kernel-Hermes-Full-NS
-        path: arch/arm64/boot/Image.gz-dtb
+        echo "--- ANALISA 1: kernel/cgroup.c ---"
+        # Menampilkan baris yang error kemarin (sekitar baris 2170)
+        sed -n '2160,2180p' kernel/cgroup.c
+        
+        echo "--- ANALISA 2: fs/sdcardfs/sdcardfs.h ---"
+        # Menampilkan baris yang error kemarin (sekitar baris 540-620)
+        sed -n '540,550p;610,620p' fs/sdcardfs/sdcardfs.h
+
+        echo "--- TEST COMPILE: kernel/cgroup.o ---"
+        make kernel/cgroup.o KCFLAGS="-w" || true
+
+        echo "--- TEST COMPILE: fs/sdcardfs/dentry.o ---"
+        make fs/sdcardfs/dentry.o KCFLAGS="-w" || true
