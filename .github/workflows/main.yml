@@ -1,11 +1,11 @@
 name: Build Kernel Hermes
 
 on:
-  workflow_dispatch: # Jalankan manual dari tab Actions
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04 # Versi paling stabil untuk library i386
+    runs-on: ubuntu-22.04
     
     steps:
     - name: Checkout Source
@@ -28,14 +28,15 @@ jobs:
         export ARCH=arm64
         export CROSS_COMPILE=$(pwd)/toolchain/bin/aarch64-linux-android-
         
-        # Bersihkan sisa build
         make clean
         make mrproper
-        
-        # Konfigurasi defconfig Hermes
         make hermes_defconfig
         
-        # --- AUTO-INJECT NAMESPACE (FIX UNTUK VNC/CHROOT) ---
+        # FIX CGROUP UID ERROR (Suntikan Sakti)
+        sed -i 's/cred->euid != tcred->suid/!uid_eq(cred->euid, tcred->suid)/g' kernel/cgroup.c
+        sed -i 's/cred->uid != tcred->uid/!uid_eq(cred->uid, tcred->uid)/g' kernel/cgroup.c
+        
+        # SUNTIK NAMESPACE
         sed -i 's/# CONFIG_NAMESPACES is not set/CONFIG_NAMESPACES=y/' .config
         {
           echo "CONFIG_UTS_NS=y"
@@ -45,15 +46,14 @@ jobs:
           echo "CONFIG_NET_NS=y"
         } >> .config
         
-        # Mulai kompilasi
         make -j$(nproc)
 
     - name: Check Output
       run: |
         if [ -f arch/arm64/boot/Image.gz-dtb ]; then
-          echo "✅ KERNEL BERHASIL DI-BUILD!"
+          echo "✅ KERNEL BERHASIL!"
         else
-          echo "❌ KERNEL TIDAK DITEMUKAN!"
+          echo "❌ KERNEL GAGAL!"
           exit 1
         fi
 
