@@ -17,7 +17,7 @@ jobs:
       run: |
         sudo dpkg --add-architecture i386
         sudo apt-get update
-        sudo apt-get install -y bc build-essential zip curl libssl-dev libssl-dev:i386 flex bison libncurses5-dev libncurses5 libncurses5:i386 binutils-aarch64-linux-gnu gcc-multilib g++-multilib
+        sudo apt-get install -y bc build-essential zip curl libssl-dev libssl-dev:i386 flex bison libncurses5-dev libncurses5 libncurses5:i386 binutils-aarch64-linux-gnu
 
     - name: Download Toolchain
       run: |
@@ -32,8 +32,12 @@ jobs:
         make mrproper
         make hermes_defconfig
         
-        # Kita simpan output ke file build.log untuk dianalisa jika gagal
-        make -j$(nproc) KCFLAGS="-w" 2>&1 | tee build.log
+        # 1. Jalankan paralel dulu biar cepat sampai titik error
+        make -j$(nproc) KCFLAGS="-w" || true
+        
+        # 2. Jalankan SINGLE CORE (-j1) untuk menangkap error asli di akhir log
+        echo "----------------- CAPTURING ACTUAL ERROR -----------------"
+        make -j1 KCFLAGS="-w"
         
     - name: Check Output
       if: always()
@@ -41,8 +45,7 @@ jobs:
         if [ -f arch/arm64/boot/Image.gz-dtb ]; then
           echo "✅ KERNEL BERHASIL!"
         else
-          echo "❌ KERNEL GAGAL! Menampilkan 50 baris terakhir log error:"
-          tail -n 50 build.log
+          echo "❌ KERNEL GAGAL!"
           exit 1
         fi
 
