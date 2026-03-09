@@ -1,4 +1,4 @@
-name: Build Kernel Hermes - Full NS Final Fix v3
+name: Build Kernel Hermes - Full NS Debugging
 
 on:
   workflow_dispatch:
@@ -28,32 +28,12 @@ jobs:
         export ARCH=arm64
         export CROSS_COMPILE=$(pwd)/toolchain/bin/aarch64-linux-android-
         
-        # 1. FIX CMDQ
+        # 1. FIX CMDQ (Wajib buat MT6795)
         find drivers/misc/mediatek/cmdq/v2/ -name "Makefile" -exec sed -i 's|ccflags-y += -I|ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v2/mt6795/ -I|g' {} +
         
-        # 2. FIX CGROUP
-        sed -i 's/cred->euid != tcred->uid/!uid_eq(cred->euid, tcred->uid)/g' kernel/cgroup.c
-        sed -i 's/cred->euid != tcred->suid/!uid_eq(cred->euid, tcred->suid)/g' kernel/cgroup.c
-
-        # 3. SAPU BERSIH SDCARDFS (Assignment & Comparison)
-        # Fix Header & Inode (Assignment)
-        sed -i 's/(x)->i_uid = SDCARDFS_I(x)->data->d_uid/(x)->i_uid = make_kuid(current_user_ns(), SDCARDFS_I(x)->data->d_uid)/g' fs/sdcardfs/sdcardfs.h
-        sed -i 's/(x)->i_gid = AID_SDCARD_RW/(x)->i_gid = make_kgid(current_user_ns(), AID_SDCARD_RW)/g' fs/sdcardfs/sdcardfs.h
-        sed -i 's/cred->fsuid = uid/cred->fsuid = make_kuid(current_user_ns(), uid)/g' fs/sdcardfs/inode.c
-        sed -i 's/cred->fsgid = sbi->options.fs_low_gid/cred->fsgid = make_kgid(current_user_ns(), sbi->options.fs_low_gid)/g' fs/sdcardfs/inode.c
-        sed -i 's/attrs.ia_uid = uid/attrs.ia_uid = make_kuid(current_user_ns(), uid)/g' fs/sdcardfs/sdcardfs.h
-        sed -i 's/attrs.ia_gid = gid/attrs.ia_gid = make_kgid(current_user_ns(), gid)/g' fs/sdcardfs/sdcardfs.h
-        
-        # Fix packagelist.c (Comparison with 0/root)
-        sed -i 's/current_fsuid() == 0/uid_eq(current_fsuid(), GLOBAL_ROOT_UID)/g' fs/sdcardfs/packagelist.c
-        
-        # Fix derived_perm.c (Comparison with variables)
-        sed -i 's/i_gid != gid/!gid_eq(path.dentry->d_inode->i_gid, make_kgid(current_user_ns(), gid))/g' fs/sdcardfs/derived_perm.c
-        sed -i 's/i_uid != uid/!uid_eq(path.dentry->d_inode->i_uid, make_kuid(current_user_ns(), uid))/g' fs/sdcardfs/derived_perm.c
-
         make hermes_defconfig
 
-        # --- AKTIFKAN FULL NAMESPACE ---
+        # 2. AKTIFKAN FULL NAMESPACE (Konfigurasi yang kamu mau)
         echo "CONFIG_NAMESPACES=y" >> .config
         echo "CONFIG_UTS_NS=y" >> .config
         echo "CONFIG_IPC_NS=y" >> .config
@@ -62,7 +42,10 @@ jobs:
         echo "CONFIG_USER_NS=y" >> .config
         
         make olddefconfig
-        make -j$(nproc) KCFLAGS="-w"
+        
+        # 3. BUILD DENGAN MODE TANGKAP ERROR
+        # Kita pakai nproc dulu biar cepat, kalau gagal baru lari ke j1
+        make -j$(nproc) KCFLAGS="-w" || make -j1 KCFLAGS="-w"
         
     - name: Check Output
       if: always()
@@ -70,8 +53,10 @@ jobs:
         if [ -f arch/arm64/boot/Image.gz-dtb ]; then
           echo "✅ AKHIRNYA TEMBUS! KERNEL NAMESPACE SUKSES!"
         else
-          echo "❌ MASIH ADA ERROR! Menampilkan error terbaru:"
-          make -j1 KCFLAGS="-w" 2>&1 | grep "error:" | head -n 5
+          echo "❌ ERROR TERDETEKSI!"
+          echo "Sedang mencari baris error yang menyebabkan build berhenti..."
+          # Jalankan ulang j1 untuk memastikan error tertangkap di log paling bawah
+          make -j1 KCFLAGS="-w" 2>&1 | grep "error:" | head -n 20
           exit 1
         fi
 
@@ -79,5 +64,5 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel-Hermes-FullNS-Final-v3
+        name: Kernel-Hermes-FullNS-Debug
         path: arch/arm64/boot/Image.gz-dtb
