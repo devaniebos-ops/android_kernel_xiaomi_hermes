@@ -1,4 +1,4 @@
-name: Build Kernel Hermes - Full NS Debugging
+name: Build Kernel Hermes - Incremental Fast Build
 
 on:
   workflow_dispatch:
@@ -19,32 +19,53 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y bc build-essential zip curl libssl-dev libssl-dev:i386 flex bison libncurses5-dev libncurses5 libncurses5:i386 binutils-aarch64-linux-gnu
 
+    - name: Cache Toolchain
+      uses: actions/cache@v4
+      with:
+        path: toolchain
+        key: toolchain-hermes-v1
+
     - name: Download Toolchain
+      if: steps.cache-toolchain.outputs.cache-hit != 'true'
       run: |
         git clone https://github.com/lineageos/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 toolchain --depth=1
+
+    # --- INI KUNCI AGAR START DARI PROGRESS SEBELUMNYA ---
+    - name: Cache Build Progress
+      uses: actions/cache@v4
+      with:
+        path: |
+          .config
+          **/*.o
+          **/*.o.cmd
+          **/*.a
+          **/*.s
+        # Key ini akan berubah setiap kali kamu push, tapi tetap mengambil dari cache sebelumnya (restore-keys)
+        key: kernel-build-${{ github.sha }}
+        restore-keys: |
+          kernel-build-
 
     - name: Build Kernel
       run: |
         export ARCH=arm64
         export CROSS_COMPILE=$(pwd)/toolchain/bin/aarch64-linux-android-
         
-        # 1. FIX CMDQ (Wajib buat MT6795)
+        # FIX CMDQ
         find drivers/misc/mediatek/cmdq/v2/ -name "Makefile" -exec sed -i 's|ccflags-y += -I|ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v2/mt6795/ -I|g' {} +
         
-        make hermes_defconfig
-
-        # 2. AKTIFKAN FULL NAMESPACE (Konfigurasi yang kamu mau)
-        echo "CONFIG_NAMESPACES=y" >> .config
-        echo "CONFIG_UTS_NS=y" >> .config
-        echo "CONFIG_IPC_NS=y" >> .config
-        echo "CONFIG_PID_NS=y" >> .config
-        echo "CONFIG_NET_NS=y" >> .config
-        echo "CONFIG_USER_NS=y" >> .config
+        # Hanya buat defconfig jika .config tidak ada (dari cache)
+        if [ ! -f .config ]; then
+          make hermes_defconfig
+          echo "CONFIG_NAMESPACES=y" >> .config
+          echo "CONFIG_UTS_NS=y" >> .config
+          echo "CONFIG_IPC_NS=y" >> .config
+          echo "CONFIG_PID_NS=y" >> .config
+          echo "CONFIG_NET_NS=y" >> .config
+          echo "CONFIG_USER_NS=y" >> .config
+          make olddefconfig
+        fi
         
-        make olddefconfig
-        
-        # 3. BUILD DENGAN MODE TANGKAP ERROR
-        # Kita pakai nproc dulu biar cepat, kalau gagal baru lari ke j1
+        # Build lanjutin sisa file .o yang belum ada
         make -j$(nproc) KCFLAGS="-w" || make -j1 KCFLAGS="-w"
         
     - name: Check Output
@@ -54,8 +75,7 @@ jobs:
           echo "✅ AKHIRNYA TEMBUS! KERNEL NAMESPACE SUKSES!"
         else
           echo "❌ ERROR TERDETEKSI!"
-          echo "Sedang mencari baris error yang menyebabkan build berhenti..."
-          # Jalankan ulang j1 untuk memastikan error tertangkap di log paling bawah
+          # Jalankan j1 sebentar buat nangkep error spesifik
           make -j1 KCFLAGS="-w" 2>&1 | grep "error:" | head -n 20
           exit 1
         fi
@@ -64,5 +84,5 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel-Hermes-FullNS-Debug
+        name: Kernel-Hermes-FullNS-Final
         path: arch/arm64/boot/Image.gz-dtb
