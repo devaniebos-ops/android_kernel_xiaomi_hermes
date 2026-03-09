@@ -32,23 +32,29 @@ jobs:
         make mrproper
         make hermes_defconfig
         
-        # --- 1. GLOBAL UID/GID FIX (Fungsi Perbandingan) ---
+        # --- 1. GLOBAL UID/GID FIX ---
         find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->euid != \([^ ]*\)->suid/!uid_eq(\1->euid, \2->suid)/g' {} +
         find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->uid != \([^ ]*\)->uid/!uid_eq(\1->uid, \2->uid)/g' {} +
         find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->gid != \([^ ]*\)->gid/!gid_eq(\1->gid, \2->gid)/g' {} +
-        find fs/sdcardfs/ -type f -name "*.c" -exec sed -i 's/== 0/== GLOBAL_ROOT_UID/g' {} +
-        find fs/sdcardfs/ -type f -name "*.c" -exec sed -i 's/!= 0/!= GLOBAL_ROOT_UID/g' {} +
 
-        # --- 2. SDCARDFS STRUCT WRAPPER (Penetapan Nilai) ---
-        # Bungkus semua penetapan UID/GID dengan KUIDT_INIT/KGIDT_INIT secara massal
+        # --- 2. SDCARDFS SPECIFIC FIX ---
+        # Membungkus penetapan nilai
         find fs/sdcardfs/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/\.ia_uid = \([^;]*\)/.ia_uid = KUIDT_INIT(\1)/g' {} +
         find fs/sdcardfs/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/\.ia_gid = \([^;]*\)/.ia_gid = KGIDT_INIT(\1)/g' {} +
         find fs/sdcardfs/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/->i_uid = \([^;]*\)/->i_uid = KUIDT_INIT(\1)/g' {} +
         find fs/sdcardfs/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/->i_gid = \([^;]*\)/->i_gid = KGIDT_INIT(\1)/g' {} +
-        find fs/sdcardfs/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/->fsuid = \([^;]*\)/->fsuid = KUIDT_INIT(\1)/g' {} +
-        find fs/sdcardfs/ -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/->fsgid = \([^;]*\)/->fsgid = KGIDT_INIT(\1)/g' {} +
+        
+        # FIX KHUSUS dentry.c: perbandingan int vs kuid_t
+        sed -i 's/if (err == GLOBAL_ROOT_UID)/if (uid_eq(KUIDT_INIT(err), GLOBAL_ROOT_UID))/g' fs/sdcardfs/dentry.c
+        # FIX KHUSUS packagelist.c
+        sed -i 's/current_fsuid() == 0/uid_eq(current_fsuid(), GLOBAL_ROOT_UID)/g' fs/sdcardfs/packagelist.c
 
-        # --- 3. SUNTIK NAMESPACE ---
+        # --- 3. QUOTA KUID FIX (Mencegah warning fatal) ---
+        # Menghapus pengecekan switch yang menggantung atau menambahkan return default
+        sed -i 's/return qid.val;//g' fs/quota/kqid.c
+        sed -i '/switch (kqid.type) {/i return kqid.val;' fs/quota/kqid.c
+
+        # --- 4. SUNTIK NAMESPACE ---
         sed -i 's/# CONFIG_NAMESPACES is not set/CONFIG_NAMESPACES=y/' .config
         {
           echo "CONFIG_UTS_NS=y"
