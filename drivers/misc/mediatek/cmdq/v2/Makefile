@@ -1,7 +1,7 @@
 # common driver code for CMDQ
 # 72/82/92 does not use this common code
 
-ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v2/$(MTK_PLATFORM) \
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v2/mt6795/ -I$(srctree)/drivers/misc/mediatek/cmdq/v2/$(MTK_PLATFORM) \
              -I$(srctree)/drivers/misc/mediatek/smi \
              -I$(srctree)/drivers/misc/mediatek/mach/$(MTK_PLATFORM)/include
 
@@ -30,7 +30,7 @@ ifeq ($(strip $(CONFIG_MTK_SEC_VIDEO_PATH_SUPPORT)),y)
 ifeq ($(strip $(CONFIG_TRUSTONIC_TEE_SUPPORT)),y)
 include $(srctree)/drivers/misc/mediatek/gud/Makefile.include
 
-ccflags-y += -I$(srctree)/drivers/misc/mediatek/mach/$(MTK_PLATFORM)/include/trustzone/cmdq/cmdq_sec_dr \
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v2/mt6795/ -I$(srctree)/drivers/misc/mediatek/mach/$(MTK_PLATFORM)/include/trustzone/cmdq/cmdq_sec_dr \
              -I$(srctree)/drivers/misc/mediatek/mach/$(MTK_PLATFORM)/include/trustzone/cmdq/cmdq_sec_tl
 
 ccflags-y += -DCMDQ_SECURE_PATH_SUPPORT
@@ -51,7 +51,7 @@ endif
 
 ifneq (,$(filter $(CONFIG_MTK_PLATFORM), "mt6795" "mt6752"))
 ccflags-y += -DCMDQ_CG_M4U_LARB0
-ccflags-y += -I$(srctree)/drivers/misc/mediatek/mach/$(MTK_PLATFORM)/include/mach
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v2/mt6795/ -I$(srctree)/drivers/misc/mediatek/mach/$(MTK_PLATFORM)/include/mach
 endif
 
 ifneq (,$(filter $(CONFIG_MTK_PLATFORM), "mt6752"))
