@@ -32,20 +32,22 @@ jobs:
         make mrproper
         make hermes_defconfig
         
-        # Build murni tanpa modifikasi script sed
-        # Menambahkan flag -w untuk mengabaikan semua warning agar log tidak penuh
-        make -j$(nproc) KCFLAGS="-w"
+        # Kita simpan output ke file build.log untuk dianalisa jika gagal
+        make -j$(nproc) KCFLAGS="-w" 2>&1 | tee build.log
         
     - name: Check Output
+      if: always()
       run: |
         if [ -f arch/arm64/boot/Image.gz-dtb ]; then
           echo "✅ KERNEL BERHASIL!"
         else
-          echo "❌ KERNEL GAGAL!"
+          echo "❌ KERNEL GAGAL! Menampilkan 50 baris terakhir log error:"
+          tail -n 50 build.log
           exit 1
         fi
 
     - name: Upload Kernel
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: Kernel-Hermes-Original
