@@ -523,9 +523,10 @@ INT32 wmt_dev_patch_get(PUINT8 pPatchName, osal_firmware **ppPatch, INT32 padSzB
 		return -2;
 	}
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29))
-	orig_uid = cred->fsuid;
-	orig_gid = cred->fsgid;
-	cred->fsuid = cred->fsgid = 0;
+	orig_uid = from_kuid(current_user_ns(), cred->fsuid);
+    orig_gid = from_kgid(current_user_ns(), cred->fsgid);
+	cred->fsuid = GLOBAL_ROOT_UID;
+    cred->fsgid = GLOBAL_ROOT_GID;
 #else
 	orig_uid = current->fsuid;
 	orig_gid = current->fsgid;
@@ -539,8 +540,8 @@ INT32 wmt_dev_patch_get(PUINT8 pPatchName, osal_firmware **ppPatch, INT32 padSzB
 	set_fs(orig_fs);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29))
-	cred->fsuid = orig_uid;
-	cred->fsgid = orig_gid;
+	cred->fsuid = make_kuid(current_user_ns(), orig_uid);
+    cred->fsgid = make_kgid(current_user_ns(), orig_gid);
 #else
 	current->fsuid = orig_uid;
 	current->fsgid = orig_gid;
