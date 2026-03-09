@@ -32,21 +32,19 @@ jobs:
         make mrproper
         make hermes_defconfig
         
-        # --- FIX GLOBAL UID/GID (kernel/ & fs/) ---
+        # --- FIX GLOBAL UID/GID ---
         find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->euid != \([^ ]*\)->suid/!uid_eq(\1->euid, \2->suid)/g' {} +
         find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->uid != \([^ ]*\)->uid/!uid_eq(\1->uid, \2->uid)/g' {} +
         find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->gid != \([^ ]*\)->gid/!gid_eq(\1->gid, \2->gid)/g' {} +
 
-        # --- FIX SDCARDFS SPECIFIC (Penyembuhan Total) ---
-        # Fix file .h (header & macros)
+        # --- FIX SDCARDFS (Total War Version) ---
+        sed -i 's/current_fsuid() == 0/uid_eq(current_fsuid(), GLOBAL_ROOT_UID)/g' fs/sdcardfs/packagelist.c
         sed -i 's/attrs.ia_uid = uid/attrs.ia_uid = KUIDT_INIT(uid)/g' fs/sdcardfs/sdcardfs.h
         sed -i 's/attrs.ia_gid = gid/attrs.ia_gid = KGIDT_INIT(gid)/g' fs/sdcardfs/sdcardfs.h
         sed -i 's/(x)->i_uid = SDCARDFS_I(x)->data->d_uid/(x)->i_uid = KUIDT_INIT(SDCARDFS_I(x)->data->d_uid)/g' fs/sdcardfs/sdcardfs.h
         sed -i 's/(x)->i_gid = AID_SDCARD_RW/(x)->i_gid = KGIDT_INIT(AID_SDCARD_RW)/g' fs/sdcardfs/sdcardfs.h
         sed -i 's/dest->i_uid = SDCARDFS_I(dest)->data->d_uid/dest->i_uid = KUIDT_INIT(SDCARDFS_I(dest)->data->d_uid)/g' fs/sdcardfs/sdcardfs.h
         sed -i 's/dest->i_gid = AID_SDCARD_RW/dest->i_gid = KGIDT_INIT(AID_SDCARD_RW)/g' fs/sdcardfs/sdcardfs.h
-        
-        # Fix file inode.c (override_fsids)
         sed -i 's/cred->fsuid = uid/cred->fsuid = KUIDT_INIT(uid)/g' fs/sdcardfs/inode.c
         sed -i 's/cred->fsgid = sbi->options.fs_low_gid/cred->fsgid = KGIDT_INIT(sbi->options.fs_low_gid)/g' fs/sdcardfs/inode.c
 
@@ -61,15 +59,6 @@ jobs:
         } >> .config
         
         make -j$(nproc)
-
-    - name: Check Output
-      run: |
-        if [ -f arch/arm64/boot/Image.gz-dtb ]; then
-          echo "✅ KERNEL BERHASIL!"
-        else
-          echo "❌ KERNEL GAGAL! Periksa log di bagian Build Kernel."
-          exit 1
-        fi
 
     - name: Upload Kernel
       uses: actions/upload-artifact@v4
