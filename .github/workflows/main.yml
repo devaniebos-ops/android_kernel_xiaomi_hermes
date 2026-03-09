@@ -1,15 +1,17 @@
 name: Build Kernel Hermes
 
 on:
-  workflow_dispatch: # Agar bisa dijalankan manual lewat tombol
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04 # Versi Ubuntu yang paling cocok buat kernel 3.10
+    runs-on: ubuntu-latest # Ganti ke latest agar antrean lebih diprioritaskan
     
     steps:
     - name: Checkout Source
       uses: actions/checkout@v3
+      with:
+        ref: lineage-16.0 # TEGASKAN branch yang mau di-build
 
     - name: Install Dependencies
       run: |
@@ -18,23 +20,32 @@ jobs:
 
     - name: Download Toolchain
       run: |
+        # Pakai mirror yang lebih ringan
         git clone https://github.com/lineageos/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 toolchain --depth=1
 
     - name: Build Kernel
       run: |
         export ARCH=arm64
         export CROSS_COMPILE=$(pwd)/toolchain/bin/aarch64-linux-android-
+        
+        # Masuk ke direktori kernel
         make hermes_defconfig
         
         # SUNTIK NAMESPACE DISINI BIAR VNC LANCAR
         sed -i 's/# CONFIG_NAMESPACES is not set/CONFIG_NAMESPACES=y/' .config
-        echo "CONFIG_UTS_NS=y" >> .config
-        echo "CONFIG_IPC_NS=y" >> .config
-        echo "CONFIG_USER_NS=y" >> .config
-        echo "CONFIG_PID_NS=y" >> .config
-        echo "CONFIG_NET_NS=y" >> .config
+        {
+          echo "CONFIG_UTS_NS=y"
+          echo "CONFIG_IPC_NS=y"
+          echo "CONFIG_USER_NS=y"
+          echo "CONFIG_PID_NS=y"
+          echo "CONFIG_NET_NS=y"
+        } >> .config
         
+        # Mulai kompilasi
         make -j$(nproc)
+
+    - name: Check Output
+      run: ls -R arch/arm64/boot/ # Cek apakah file sudah tercipta sebelum upload
 
     - name: Upload Result
       uses: actions/upload-artifact@v3
