@@ -1,4 +1,4 @@
-name: Build Kernel Hermes - Debug UID Manual
+name: Build Kernel Hermes - Full NS Success
 
 on:
   workflow_dispatch:
@@ -23,27 +23,55 @@ jobs:
       run: |
         git clone https://github.com/lineageos/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 toolchain --depth=1
 
-    - name: Manual Debugging
+    - name: Build Kernel
       run: |
         export ARCH=arm64
         export CROSS_COMPILE=$(pwd)/toolchain/bin/aarch64-linux-android-
         
-        # 1. Setup Config dengan USER_NS Aktif
-        make hermes_defconfig
-        echo "CONFIG_NAMESPACES=y" >> .config
-        echo "CONFIG_USER_NS=y" >> .config
-        make olddefconfig
-
-        echo "--- ANALISA 1: kernel/cgroup.c ---"
-        # Menampilkan baris yang error kemarin (sekitar baris 2170)
-        sed -n '2160,2180p' kernel/cgroup.c
+        # 1. FIX CMDQ (Wajib)
+        find drivers/misc/mediatek/cmdq/v2/ -name "Makefile" -exec sed -i 's|ccflags-y += -I|ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v2/mt6795/ -I|g' {} +
         
-        echo "--- ANALISA 2: fs/sdcardfs/sdcardfs.h ---"
-        # Menampilkan baris yang error kemarin (sekitar baris 540-620)
-        sed -n '540,550p;610,620p' fs/sdcardfs/sdcardfs.h
+        # 2. FIX CGROUP (Perbandingan UID)
+        # Mengubah: cred->euid != tcred->uid  MENJADI: !uid_eq(cred->euid, tcred->uid)
+        sed -i 's/cred->euid != tcred->uid/!uid_eq(cred->euid, tcred->uid)/g' kernel/cgroup.c
+        sed -i 's/cred->euid != tcred->suid/!uid_eq(cred->euid, tcred->suid)/g' kernel/cgroup.c
 
-        echo "--- TEST COMPILE: kernel/cgroup.o ---"
-        make kernel/cgroup.o KCFLAGS="-w" || true
+        # 3. FIX SDCARDFS (Konversi Angka ke kuid_t)
+        # Kita gunakan make_kuid dan make_kgid karena sdcardfs butuh mapping ke init_user_ns
+        sed -i 's/attrs.ia_uid = uid/attrs.ia_uid = make_kuid(current_user_ns(), uid)/g' fs/sdcardfs/sdcardfs.h
+        sed -i 's/attrs.ia_gid = gid/attrs.ia_gid = make_kgid(current_user_ns(), gid)/g' fs/sdcardfs/sdcardfs.h
+        sed -i 's/dest->i_uid = SDCARDFS_I(dest)->data->d_uid/dest->i_uid = make_kuid(current_user_ns(), SDCARDFS_I(dest)->data->d_uid)/g' fs/sdcardfs/sdcardfs.h
+        sed -i 's/dest->i_gid = AID_SDCARD_RW/dest->i_gid = make_kgid(current_user_ns(), AID_SDCARD_RW)/g' fs/sdcardfs/sdcardfs.h
 
-        echo "--- TEST COMPILE: fs/sdcardfs/dentry.o ---"
-        make fs/sdcardfs/dentry.o KCFLAGS="-w" || true
+        make hermes_defconfig
+
+        # --- AKTIFKAN FULL NAMESPACE ---
+        echo "CONFIG_NAMESPACES=y" >> .config
+        echo "CONFIG_UTS_NS=y" >> .config
+        echo "CONFIG_IPC_NS=y" >> .config
+        echo "CONFIG_PID_NS=y" >> .config
+        echo "CONFIG_NET_NS=y" >> .config
+        echo "CONFIG_USER_NS=y" >> .config
+        
+        make olddefconfig
+        
+        # Eksekusi Build Akhir
+        make -j$(nproc) KCFLAGS="-w"
+        
+    - name: Check Output
+      if: always()
+      run: |
+        if [ -f arch/arm64/boot/Image.gz-dtb ]; then
+          echo "✅ MISI BERHASIL! KERNEL NAMESPACE SIAP DIUNDUH."
+        else
+          echo "❌ ERROR BARU DITEMUKAN:"
+          make -j1 KCFLAGS="-w" 2>&1 | grep "error:" | head -n 5
+          exit 1
+        fi
+
+    - name: Upload Kernel
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kernel-Hermes-FullNS-Final
+        path: arch/arm64/boot/Image.gz-dtb
