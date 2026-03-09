@@ -32,11 +32,17 @@ jobs:
         make mrproper
         make hermes_defconfig
         
-        # --- GLOBAL UID/GID FIX (Mencegah Error di fs/ dan kernel/) ---
-        # Mengganti perbandingan UID/GID struktural menjadi fungsi uid_eq/gid_eq
+        # --- FIX ERROR CGROUP & FS GLOBAL ---
         find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->euid != \([^ ]*\)->suid/!uid_eq(\1->euid, \2->suid)/g' {} +
         find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->uid != \([^ ]*\)->uid/!uid_eq(\1->uid, \2->uid)/g' {} +
         find fs/ kernel/ -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->gid != \([^ ]*\)->gid/!gid_eq(\1->gid, \2->gid)/g' {} +
+
+        # --- FIX SPECIFIC SDCARDFS UID/GID ERROR ---
+        # Mengubah penetapan langsung menjadi pembungkus KUIDT_INIT
+        sed -i 's/attrs.ia_uid = uid/attrs.ia_uid = KUIDT_INIT(uid)/g' fs/sdcardfs/sdcardfs.h
+        sed -i 's/attrs.ia_gid = gid/attrs.ia_gid = KGIDT_INIT(gid)/g' fs/sdcardfs/sdcardfs.h
+        sed -i 's/dest->i_uid = SDCARDFS_I(dest)->data->d_uid/dest->i_uid = KUIDT_INIT(SDCARDFS_I(dest)->data->d_uid)/g' fs/sdcardfs/sdcardfs.h
+        sed -i 's/dest->i_gid = AID_SDCARD_RW/dest->i_gid = KGIDT_INIT(AID_SDCARD_RW)/g' fs/sdcardfs/sdcardfs.h
 
         # --- SUNTIK NAMESPACE ---
         sed -i 's/# CONFIG_NAMESPACES is not set/CONFIG_NAMESPACES=y/' .config
@@ -48,7 +54,6 @@ jobs:
           echo "CONFIG_NET_NS=y"
         } >> .config
         
-        # Jalankan build
         make -j$(nproc)
 
     - name: Check Output
@@ -56,7 +61,7 @@ jobs:
         if [ -f arch/arm64/boot/Image.gz-dtb ]; then
           echo "✅ KERNEL BERHASIL!"
         else
-          echo "❌ KERNEL GAGAL! Periksa log di bagian Build Kernel."
+          echo "❌ KERNEL GAGAL!"
           exit 1
         fi
 
