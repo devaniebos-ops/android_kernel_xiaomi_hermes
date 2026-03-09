@@ -952,10 +952,10 @@ WLAN_STATUS kalFirmwareOpen(IN P_GLUE_INFO_T prGlueInfo)
 	/* save uid and gid used for filesystem access.
 	 * set user and group to 0(root) */
 	struct cred *cred = (struct cred *)get_current_cred();
-	orgfsuid = cred->fsuid;
-	orgfsgid = cred->fsgid;
-	cred->fsuid = cred->fsgid = 0;
-
+	orgfsuid = from_kuid(current_user_ns(), cred->fsuid);
+    orgfsgid = from_kgid(current_user_ns(), cred->fsgid);
+	cred->fsuid = GLOBAL_ROOT_UID;
+    cred->fsgid = GLOBAL_ROOT_GID;
 	ASSERT(prGlueInfo);
 
 	orgfs = get_fs();
@@ -1018,8 +1018,8 @@ WLAN_STATUS kalFirmwareOpen(IN P_GLUE_INFO_T prGlueInfo)
 error_open:
 	/* restore */
 	set_fs(orgfs);
-	cred->fsuid = orgfsuid;
-	cred->fsgid = orgfsgid;
+	cred->fsuid = make_kuid(current_user_ns(), orgfsuid);
+    cred->fsgid = make_kgid(current_user_ns(), orgfsgid);
 	put_cred(cred);
 	return WLAN_STATUS_FAILURE;
 }
@@ -1048,8 +1048,8 @@ WLAN_STATUS kalFirmwareClose(IN P_GLUE_INFO_T prGlueInfo)
 		set_fs(orgfs);
 		{
 			struct cred *cred = (struct cred *)get_current_cred();
-			cred->fsuid = orgfsuid;
-			cred->fsgid = orgfsgid;
+			cred->fsuid = make_kuid(current_user_ns(), orgfsuid);
+            cred->fsgid = make_kgid(current_user_ns(), orgfsgid);
 			put_cred(cred);
 		}
 		filp = NULL;
