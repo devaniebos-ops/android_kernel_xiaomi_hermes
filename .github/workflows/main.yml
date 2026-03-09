@@ -1,4 +1,4 @@
-name: Build Kernel Hermes - Phase 1 Namespace
+name: Build Kernel Hermes - Phase 1 Namespace Fix
 
 on:
   workflow_dispatch:
@@ -28,16 +28,22 @@ jobs:
         export ARCH=arm64
         export CROSS_COMPILE=$(pwd)/toolchain/bin/aarch64-linux-android-
         
-        # FIX CMDQ yang tadi
+        # FIX CMDQ
         find drivers/misc/mediatek/cmdq/v2/ -name "Makefile" -exec sed -i 's|ccflags-y += -I|ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v2/mt6795/ -I|g' {} +
         
         make hermes_defconfig
 
         # --- AKTIFKAN NAMESPACE TAHAP 1 ---
-        sed -i 's/# CONFIG_NAMESPACES is not set/CONFIG_NAMESPACES=y/' .config
+        # Kita pakai KCONFIG_ALLCONFIG atau langsung timpa .config
+        echo "CONFIG_NAMESPACES=y" >> .config
         echo "CONFIG_UTS_NS=y" >> .config
         echo "CONFIG_IPC_NS=y" >> .config
-        # Kita tunda USER_NS dan NET_NS karena itu yang bikin error UID kemarin
+        echo "CONFIG_PID_NS=y" >> .config
+        # Kita pastikan USER_NS mati dulu di fase ini agar tidak error UID
+        echo "# CONFIG_USER_NS is not set" >> .config
+        
+        # INI KUNCINYA: Memproses perubahan .config secara otomatis
+        make olddefconfig
         
         make -j$(nproc) KCFLAGS="-w"
         
@@ -47,9 +53,7 @@ jobs:
         if [ -f arch/arm64/boot/Image.gz-dtb ]; then
           echo "✅ KERNEL NAMESPACE PHASE 1 SUKSES!"
         else
-          echo "❌ GAGAL DI NAMESPACE! Cek log error:"
-          # Menampilkan baris error jika ada
-          make -j1 KCFLAGS="-w" 2>&1 | grep "error:" || tail -n 20
+          echo "❌ GAGAL! Cek log error di atas."
           exit 1
         fi
 
