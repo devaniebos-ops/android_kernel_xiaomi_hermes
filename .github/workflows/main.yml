@@ -1,4 +1,4 @@
-name: Build Kernel Hermes - Phase 1 Namespace Fix
+name: Build Kernel Hermes - Final Phase USER_NS
 
 on:
   workflow_dispatch:
@@ -28,32 +28,36 @@ jobs:
         export ARCH=arm64
         export CROSS_COMPILE=$(pwd)/toolchain/bin/aarch64-linux-android-
         
-        # FIX CMDQ
+        # 1. FIX CMDQ (Wajib)
         find drivers/misc/mediatek/cmdq/v2/ -name "Makefile" -exec sed -i 's|ccflags-y += -I|ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v2/mt6795/ -I|g' {} +
         
+        # 2. PATCH OTOMATIS: Memperbaiki perbandingan UID/GID yang rusak akibat USER_NS
+        # Kita incar pola yang paling sering error di cgroup dan drivers
+        find . -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->euid != \([^ ]*\)->uid/!uid_eq(\1->euid, \2->uid)/g' {} +
+        find . -type f -name "*.c" -exec sed -i 's/\([^ ]*\)->uid != \([^ ]*\)->uid/!uid_eq(\1->uid, \2->uid)/g' {} +
+
         make hermes_defconfig
 
-        # --- AKTIFKAN NAMESPACE TAHAP 1 ---
-        # Kita pakai KCONFIG_ALLCONFIG atau langsung timpa .config
+        # --- AKTIFKAN SEMUA NAMESPACE ---
         echo "CONFIG_NAMESPACES=y" >> .config
         echo "CONFIG_UTS_NS=y" >> .config
         echo "CONFIG_IPC_NS=y" >> .config
         echo "CONFIG_PID_NS=y" >> .config
-        # Kita pastikan USER_NS mati dulu di fase ini agar tidak error UID
-        echo "# CONFIG_USER_NS is not set" >> .config
+        echo "CONFIG_NET_NS=y" >> .config
+        echo "CONFIG_USER_NS=y" >> .config
         
-        # INI KUNCINYA: Memproses perubahan .config secara otomatis
         make olddefconfig
         
-        make -j$(nproc) KCFLAGS="-w"
+        # Kita pakai -j2 tapi jika gagal kita akan coba tangkap errornya
+        make -j$(nproc) KCFLAGS="-w" || (make -j1 KCFLAGS="-w" 2>&1 | grep "error:")
         
     - name: Check Output
       if: always()
       run: |
         if [ -f arch/arm64/boot/Image.gz-dtb ]; then
-          echo "✅ KERNEL NAMESPACE PHASE 1 SUKSES!"
+          echo "✅ MISI SELESAI: KERNEL FULL NAMESPACE SUKSES!"
         else
-          echo "❌ GAGAL! Cek log error di atas."
+          echo "❌ GAGAL DI USER_NS! Masih ada kode yang butuh uid_eq manual."
           exit 1
         fi
 
@@ -61,5 +65,5 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel-Hermes-NS-Phase1
+        name: Kernel-Hermes-Full-NS
         path: arch/arm64/boot/Image.gz-dtb
