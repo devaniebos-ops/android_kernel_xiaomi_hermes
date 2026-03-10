@@ -3699,7 +3699,7 @@ int msdc_debug_proc_init(void)
 #endif
 	if (prEntry) {
 		pr_notice("[%s]: successfully create /proc/msdc_debug\n", __func__);
-		proc_set_user(prEntry, 0, 1001);
+		proc_set_user(prEntry, GLOBAL_ROOT_UID, make_kgid(current_user_ns(), 1001));
 	} else {
 		pr_err("[%s]: failed to create /proc/msdc_debug\n", __func__);
 	}
@@ -3746,7 +3746,7 @@ int msdc_debug_proc_init(void)
 	tune = proc_create("msdc_tune", 0460, NULL, &msdc_tune_fops);
 #endif
 	if (tune) {
-		proc_set_user(tune, 0, 1001);
+		proc_set_user(tune, GLOBAL_ROOT_UID, make_kgid(current_user_ns(), 1001));
 		pr_notice("[%s]: successfully create /proc/msdc_tune\n", __func__);
 	} else {
 		pr_err("[%s]: failed to create /proc/msdc_tune\n", __func__);
@@ -3769,7 +3769,7 @@ int msdc_debug_proc_init(void)
 #endif
 	if(voltage_flag)
 	{
-		proc_set_user(voltage_flag, 0, 1001);
+		proc_set_user(voltage_flag, GLOBAL_ROOT_UID, make_kgid(current_user_ns(), 1001));
 		printk("[%s]: successfully create /proc/msdc_voltage_flag\n", __func__);
 	}else{
 		printk("[%s]: failed to create /proc/msdc_voltage_flag\n", __func__);
