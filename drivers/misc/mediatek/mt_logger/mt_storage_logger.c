@@ -1783,14 +1783,14 @@ static int __init storage_logger_init(void)
 	CREATE_PROC_ENTRY(procEntry, "driver/storage_logger", ACCESS_PERMISSION, NULL,
 			  &driver_base_proc_fops);
 	if (procEntry) {
-		procEntry->gid = 1000;
+		procEntry->gid = make_kgid(current_user_ns(), 1000);
 	} else
 		SLog_MSG("add /proc/driver/storage_logger entry fail");
 
 	CREATE_PROC_ENTRY(procEntry, "driver/storage_logger_config", ACCESS_PERMISSION, NULL,
 			  &driver_config_proc_fops);
 	if (procEntry) {
-		procEntry->gid = 1000;
+		procEntry->gid = make_kgid(current_user_ns(), 1000);
 	} else
 		SLog_MSG("add /proc/driver/storage_logger_config entry fail");
 
@@ -1803,14 +1803,14 @@ static int __init storage_logger_init(void)
 	CREATE_PROC_ENTRY(procEntry, "driver/thermal_logger_config", ACCESS_PERMISSION, NULL,
 			  &driver_thermal_config_proc_fops);
 	if (procEntry) {
-		procEntry->gid = 1000;
+		procEntry->gid = make_kgid(current_user_ns(), 1000);
 	} else
 		SLog_MSG("add /proc/driver/thermal_logger_config entry fail");
 
 	CREATE_PROC_ENTRY(procEntry, "driver/storage_logger_display", ACCESS_PERMISSION, NULL,
 			  &storage_logger_proc_fops);
 	if (procEntry) {
-		procEntry->gid = 1000;
+		procEntry->gid = make_kgid(current_user_ns(), 1000);
 	} else
 		SLog_MSG("add /proc/driver/storage_logger entry fail");
 
@@ -1888,7 +1888,7 @@ static int __init storage_logger_init(void)
 	CREATE_PROC_ENTRY(procEntry, "driver/storage_logger_bufsize_malloc", ACCESS_PERMISSION,
 			  NULL, &driver_bufsize_proc_fops);
 	if (procEntry) {
-		procEntry->gid = 1000;
+		procEntry->gid = make_kgid(current_user_ns(), 1000);
 	}
 
 	CREATE_PROC_ENTRY(procEntry, "driver/storage_logger_filename", ACCESS_PERMISSION, NULL,
